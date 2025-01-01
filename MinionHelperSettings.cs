@@ -21,5 +21,11 @@ namespace MinionHelper
 
         [Menu("Grim Feast Circle Color")]
         public ColorNode GrimFeastColor { get; set; } = new ColorNode(Color.FromArgb(179, Color.Aqua.R, Color.Aqua.G, Color.Aqua.B));
+
+        [Menu("Alive Minion Color")]
+        public ColorNode MinionAliveColor { get; set; } = new ColorNode(Color.FromArgb(255, Color.LightGreen));
+
+        [Menu("Dead Minion Color")]
+        public ColorNode MinionDeadColor { get; set; } = new ColorNode(Color.FromArgb(255, Color.Red));
     }
 }

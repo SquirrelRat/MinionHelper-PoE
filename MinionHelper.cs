@@ -11,6 +11,8 @@ namespace MinionHelper
 {
     public class MinionHelper : BaseSettingsPlugin<MinionHelperSettings>
     {
+        private int lastKnownMinionCount = 0;
+
         public override bool Initialise() => true;
 
         public override void Render()
@@ -46,20 +48,18 @@ namespace MinionHelper
             var worldPos = spike.Pos;
             var screenPos = GameController.IngameState.Camera.WorldToScreen(worldPos);
 
-            // Calculate minion percentages
             var minions = GameController.EntityListWrapper.ValidEntitiesByType[EntityType.Monster]
-                .Where(e => e.IsAlive && e.Path?.Contains("PlayerSummoned") == true);
-            
-            int total = minions.Count();
-            if (total == 0) return;
+                .Where(e => e.Path?.Contains("PlayerSummoned") == true)
+                .ToList();
 
-            int inRange = minions.Count(m => Vector3.Distance(m.Pos, worldPos) <= scaledAoe);
-            float inRangePercent = ((float)inRange / total) * 100;
+            int currentTotal = minions.Count;
 
-            RenderUI(buff, new Vector2(screenPos.X, screenPos.Y), worldPos, scaledAoe, damage, inRangePercent);
+            int deadMinions = minions.Count(m => !m.IsAlive);
+
+            RenderUI(buff, new Vector2(screenPos.X, screenPos.Y), worldPos, scaledAoe, damage, currentTotal, deadMinions);
         }
 
-        private void RenderUI(Buff buff, Vector2 screenPos, Vector3 worldPos, float aoe, float damage, float inRangePercent)
+        private void RenderUI(Buff buff, Vector2 screenPos, Vector3 worldPos, float aoe, float damage, int totalMinions, int deadMinions)
         {
             if (buff.Timer <= 0 || buff.MaxTime <= 0 || Graphics == null) return;
 
@@ -68,36 +68,60 @@ namespace MinionHelper
 
             Graphics.DrawCircleInWorld(worldPos, aoe, color, 2, 48);
 
-            // Draw UI elements
             var offeringText = "Offering: ";
             var timerText = $"{buff.Timer:F1}s";
             var dmgText = "Dmg";
             var dmgValueText = $"+{damage}%";
-            var rangeText = $"Buffed: {inRangePercent:F1}%";
 
             var offeringTextSize = Graphics.MeasureText(offeringText);
             var timerTextSize = Graphics.MeasureText(timerText);
             var dmgTextSize = Graphics.MeasureText(dmgText);
             var dmgValueTextSize = Graphics.MeasureText(dmgValueText);
-            var rangeTextSize = Graphics.MeasureText(rangeText);
 
             float barWidth = offeringTextSize.X + timerTextSize.X;
             float barHeight = 10;
             Vector2 barPos = new Vector2(screenPos.X - barWidth / 2, screenPos.Y - barHeight / 2);
 
-            DrawTexts(screenPos, barPos, barWidth, barHeight, percent, color, offeringText, timerText, dmgText, dmgValueText, rangeText, offeringTextSize, timerTextSize, dmgTextSize, dmgValueTextSize, rangeTextSize);
+            DrawTexts(screenPos, barPos, barWidth, barHeight, percent, color, 
+                     offeringText, timerText, dmgText, dmgValueText, 
+                     totalMinions, deadMinions,
+                     offeringTextSize, timerTextSize, dmgTextSize, dmgValueTextSize);
         }
 
-        private void DrawTexts(Vector2 screenPos, Vector2 barPos, float barWidth, float barHeight, float fillRatio, Color barColor, string offeringText, string timerText, string dmgText, string dmgValueText, string rangeText, Vector2 offeringTextSize, Vector2 timerTextSize, Vector2 dmgTextSize, Vector2 dmgValueTextSize, Vector2 rangeTextSize)
+        private void DrawTexts(Vector2 screenPos, Vector2 barPos, float barWidth, float barHeight, float fillRatio, Color barColor, 
+            string offeringText, string timerText, string dmgText, string dmgValueText, 
+            int totalMinions, int deadMinions,
+            Vector2 offeringTextSize, Vector2 timerTextSize, Vector2 dmgTextSize, Vector2 dmgValueTextSize)
         {
             Graphics.DrawTextWithBackground(offeringText, new Vector2(barPos.X, screenPos.Y - barHeight - timerTextSize.Y), Color.White, Color.Black);
             Graphics.DrawTextWithBackground(timerText, new Vector2(barPos.X + offeringTextSize.X, screenPos.Y - barHeight - timerTextSize.Y), barColor, Color.Black);
             Graphics.DrawTextWithBackground(dmgText, new Vector2(barPos.X - dmgTextSize.X - 5, barPos.Y + (barHeight - dmgTextSize.Y) / 2), Color.White, Color.Black);
             Graphics.DrawTextWithBackground(dmgValueText, new Vector2(barPos.X + barWidth + 5, barPos.Y + (barHeight - dmgValueTextSize.Y) / 2), Color.White, Color.Black);
-            Graphics.DrawTextWithBackground(rangeText, new Vector2(screenPos.X - rangeTextSize.X / 2, barPos.Y + barHeight + 5), Color.White, Color.Black);
 
             Graphics.DrawBox(barPos, new Vector2(barPos.X + barWidth, barPos.Y + barHeight), Color.Black);
             Graphics.DrawBox(barPos, new Vector2(barPos.X + barWidth * fillRatio / 100, barPos.Y + barHeight), barColor);
+
+            float minionBarWidth = Graphics.MeasureText("|").X;
+            float startX = screenPos.X - (totalMinions * minionBarWidth) / 2;
+
+            for (int i = 0; i < totalMinions; i++)
+            {
+                bool isAlive = i < (totalMinions - deadMinions);
+                Color minionColor = isAlive ? Settings.MinionAliveColor.Value : Settings.MinionDeadColor.Value;
+                
+                Graphics.DrawTextWithBackground("|", 
+                    new Vector2(startX + (i * minionBarWidth), barPos.Y + barHeight + 5),
+                    minionColor,
+                    Color.Black);
+
+                if (!isAlive)
+                {
+                    Graphics.DrawTextWithBackground("|", 
+                        new Vector2(startX + (i * minionBarWidth), barPos.Y + barHeight + 5),
+                        Settings.MinionDeadColor.Value,
+                        Color.Black);
+                }
+            }
         }
 
         private Color GetBarColor(float percent) => percent >= 66.67 ? Settings.PainOfferingHighColor.Value : percent >= 33.33 ? Settings.PainOfferingMediumColor.Value : Settings.PainOfferingLowColor.Value;
